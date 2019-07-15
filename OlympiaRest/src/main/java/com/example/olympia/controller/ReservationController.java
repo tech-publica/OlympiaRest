@@ -7,6 +7,8 @@ import java.util.stream.StreamSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +17,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponents;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import com.example.olympia.abstractions.service.ClientService;
 import com.example.olympia.abstractions.service.CourtService;
@@ -24,6 +28,8 @@ import com.example.olympia.dto.reservation.ReservationInputDTO;
 import com.example.olympia.entity.Client;
 import com.example.olympia.entity.Court;
 import com.example.olympia.entity.Reservation;
+import com.example.olympia.exception.BadRequestException;
+import com.example.olympia.exception.ResourceNotFoundException;
 
 @RestController
 @RequestMapping("/api")
@@ -40,6 +46,8 @@ public class ReservationController {
 	
 	@GetMapping("/reservations")
 	public Iterable<ReservationDTO> all() {
+		if(2 == 1+ 1)
+		  throw new NullPointerException();
 		logger.info("calling all reservation method");
 		Iterable<Reservation> all = reservationService.list();
 		Stream<Reservation> streamRes = StreamSupport.stream(all.spliterator(), false);
@@ -51,68 +59,71 @@ public class ReservationController {
 		logger.info("calling find reservation method");
 		Reservation found = reservationService.byId(id);
 		if (found == null) {
-			throw new RuntimeException("reservation not found");
+			throw new ResourceNotFoundException("reservation not found");
 		}
 		ReservationDTO dto = ReservationDTO.reservationToDTO(found);
 		return dto;
 	}
 	
 	@PostMapping("/reservations")
-	public ReservationInputDTO add(@RequestBody ReservationInputDTO dto) {
+	public  ResponseEntity<ReservationInputDTO> add(@RequestBody ReservationInputDTO dto, UriComponentsBuilder uriComponentsBuilder) {
 		logger.info("calling add reservation method");
 		Reservation res = dto.toReservation();
 		Client client = clientService.findById(dto.getClientId());
 		if(client == null) {
-			throw new RuntimeException("client not found");
+			return new ResponseEntity<ReservationInputDTO>(HttpStatus.NOT_FOUND);
 		}
 		Court court = courtService.findById(dto.getCourtId());
 		if(court == null) {
-			throw new RuntimeException("court not found");
+			return new ResponseEntity<ReservationInputDTO>(HttpStatus.NOT_FOUND);
 		}
 		res.setClient(client);
 		res.setCourt(court);
 		reservationService.save(res);
 		ReservationInputDTO result = ReservationInputDTO.reservationToDTO(res);
-		return result;
+		UriComponents uriComponents = 
+		        uriComponentsBuilder.path("/reservations/{id}").buildAndExpand(result.getId());
+		return ResponseEntity.created(uriComponents.toUri()).body(result);
+		//return new ResponseEntity<ReservationInputDTO>(result, HttpStatus.CREATED);
 	}
 	
 	
 	@PutMapping("/reservations/{id}")
-	public ReservationInputDTO update(@PathVariable int id, @RequestBody ReservationInputDTO dto) {
+	public ResponseEntity<ReservationInputDTO> update(@PathVariable int id, @RequestBody ReservationInputDTO dto) {
 		logger.info("calling update reservation method");
 		if(dto.getId() !=  id) {
-			throw new RuntimeException("bad input data");
+			throw new BadRequestException("bad input data: id parameter must be equal to reservation id");
 		}
 		Reservation res = dto.toReservation();
 		Reservation found = reservationService.byId(id);
 		if(found== null) {
-			throw new RuntimeException("reservation not found");
+			throw new ResourceNotFoundException("reservation not found");
 		}
 		Client client = clientService.findById(dto.getClientId());
 		if(client == null) {
-			throw new RuntimeException("client not found");
+			throw new ResourceNotFoundException("client not found");
 		}
 		Court court = courtService.findById(dto.getCourtId());
 		if(court == null) {
-			throw new RuntimeException("court not found");
+			throw new ResourceNotFoundException("court not found");
 		}
 		res.setClient(client);
 		res.setCourt(court);
 		reservationService.update(res);
 		ReservationInputDTO result = ReservationInputDTO.reservationToDTO(res);
-		return result;
+		return new ResponseEntity<ReservationInputDTO>(result, HttpStatus.ACCEPTED);
 	}
 	
 	
 	@DeleteMapping("/reservations/{id}")
-	public String delete(@PathVariable int id) {
+	public ResponseEntity<Void> delete(@PathVariable int id) {
 		logger.info("calling delete reservation method");
 		Reservation found = reservationService.byId(id);
 		if(found== null) {
-			throw new RuntimeException("reservation not found");
+			throw new ResourceNotFoundException("reservation not found");
 		}
 		reservationService.delete(id);
-		return String.format("customer with id %d deleted", id);
+		return ResponseEntity.noContent().build();
 	}
 }
 
